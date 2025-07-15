@@ -114,6 +114,10 @@ echo "Setting up proxy server to forward requests to ${MAIN_SERVER_IP}"
 echo "Updating system packages..."
 sudo dnf update -y
 
+# Install EPEL repository first
+echo "Installing EPEL repository..."
+sudo dnf install epel-release -y
+
 # Install nginx
 echo "Installing nginx..."
 sudo dnf install nginx -y
@@ -442,13 +446,29 @@ if getenforce | grep -q "Enforcing"; then
     sudo setsebool -P httpd_can_network_relay 1
 fi
 
-# Configure firewall
+# Configure firewall (check if firewalld is available)
 echo "Configuring firewall..."
-sudo firewall-cmd --permanent --add-service=http
-sudo firewall-cmd --permanent --add-service=https
-sudo firewall-cmd --permanent --add-port=80/tcp
-sudo firewall-cmd --permanent --add-port=443/tcp
-sudo firewall-cmd --reload
+if command -v firewall-cmd &> /dev/null; then
+    sudo systemctl enable firewalld
+    sudo systemctl start firewalld
+    sudo firewall-cmd --permanent --add-service=http
+    sudo firewall-cmd --permanent --add-service=https
+    sudo firewall-cmd --permanent --add-port=80/tcp
+    sudo firewall-cmd --permanent --add-port=443/tcp
+    sudo firewall-cmd --reload
+    echo "Firewall configured successfully"
+else
+    echo "Firewalld not available, installing..."
+    sudo dnf install firewalld -y
+    sudo systemctl enable firewalld
+    sudo systemctl start firewalld
+    sudo firewall-cmd --permanent --add-service=http
+    sudo firewall-cmd --permanent --add-service=https
+    sudo firewall-cmd --permanent --add-port=80/tcp
+    sudo firewall-cmd --permanent --add-port=443/tcp
+    sudo firewall-cmd --reload
+    echo "Firewall installed and configured"
+fi
 
 # Start and enable nginx
 echo "Starting nginx..."
@@ -457,13 +477,23 @@ sudo systemctl start nginx
 
 # Test nginx configuration
 echo "Testing nginx configuration..."
-sudo nginx -t
-
-if [ $? -eq 0 ]; then
-    echo "✅ Nginx configuration is valid"
-    sudo systemctl restart nginx
+if command -v nginx &> /dev/null; then
+    sudo nginx -t
+    if [ $? -eq 0 ]; then
+        echo "✅ Nginx configuration is valid"
+        sudo systemctl restart nginx
+        if systemctl is-active --quiet nginx; then
+            echo "✅ Nginx is running successfully"
+        else
+            echo "❌ Nginx failed to start, checking status..."
+            sudo systemctl status nginx
+        fi
+    else
+        echo "❌ Nginx configuration has errors"
+        exit 1
+    fi
 else
-    echo "❌ Nginx configuration has errors"
+    echo "❌ Nginx command not found after installation"
     exit 1
 fi
 
