@@ -38,7 +38,7 @@ if ! command -v nginx &> /dev/null; then
     exit 1
 fi
 
-# Create simple high-performance nginx config
+# Create working nginx config (using your proven working config)
 sudo tee /etc/nginx/nginx.conf > /dev/null <<EOF
 user nginx;
 worker_processes auto;
@@ -46,7 +46,7 @@ error_log /var/log/nginx/error.log;
 pid /run/nginx.pid;
 
 events {
-    worker_connections 65535;
+    worker_connections 8192;
     use epoll;
     multi_accept on;
 }
@@ -57,20 +57,10 @@ http {
     tcp_nodelay on;
     keepalive_timeout 30;
     types_hash_max_size 2048;
-    client_max_body_size 0;
+    client_max_body_size 100M;
 
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
-
-    upstream backend {
-        server ${MAIN_SERVER_IP}:80;
-        keepalive 300;
-    }
-
-    upstream backend_ssl {
-        server ${MAIN_SERVER_IP}:443;
-        keepalive 300;
-    }
 
     server {
         listen 80 default_server;
@@ -78,13 +68,18 @@ http {
         server_name _;
 
         location / {
-            proxy_pass http://backend;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
+            proxy_pass http://${MAIN_SERVER_IP};
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_set_header X-Forwarded-Host \$host;
+            proxy_set_header X-Forwarded-Port \$server_port;
+            
+            proxy_http_version 1.1;
+            proxy_connect_timeout 5s;
+            proxy_send_timeout 10s;
+            proxy_read_timeout 30s;
         }
     }
 
@@ -96,13 +91,9 @@ http {
         ssl_certificate /etc/pki/tls/certs/localhost.crt;
         ssl_certificate_key /etc/pki/tls/private/localhost.key;
         ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_session_cache shared:SSL:50m;
-        ssl_session_timeout 1d;
 
         location / {
-            proxy_pass http://backend_ssl;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
+            proxy_pass https://${MAIN_SERVER_IP};
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -132,7 +123,6 @@ sudo firewall-cmd --reload
 sudo tee /usr/local/bin/proxy-autofix > /dev/null <<'EOF'
 #!/bin/bash
 
-# Simple auto-fix script for proxy server
 LOG_FILE="/var/log/proxy-autofix.log"
 
 log_message() {
@@ -146,15 +136,10 @@ if ! systemctl is-active --quiet nginx; then
     if systemctl is-active --quiet nginx; then
         log_message "NGINX RESTARTED - OK"
     else
-        log_message "NGINX FAILED TO START - Checking config..."
-        if nginx -t 2>/dev/null; then
-            systemctl stop nginx
-            sleep 2
-            systemctl start nginx
-            log_message "NGINX FORCE STARTED"
-        else
-            log_message "NGINX CONFIG ERROR"
-        fi
+        log_message "NGINX FAILED TO START"
+        systemctl stop nginx
+        sleep 2
+        systemctl start nginx
     fi
 fi
 
@@ -181,35 +166,37 @@ chmod +x /usr/local/bin/proxy-autofix
 echo "* soft nofile 65535" >> /etc/security/limits.conf
 echo "* hard nofile 65535" >> /etc/security/limits.conf
 
+# Test nginx configuration first
+sudo nginx -t
+
 # Start nginx
 sudo systemctl enable nginx
-sudo systemctl start nginx
+sudo systemctl restart nginx
 
-# Test configuration
-if sudo nginx -t; then
+# Check status
+if systemctl is-active --quiet nginx; then
     echo ""
     echo "✅ Simple High-Performance Proxy Server Ready!"
     echo ""
     echo "📋 Summary:"
     echo "   - Proxy IP: ${PROXY_SERVER_IP}"
     echo "   - Main Server: ${MAIN_SERVER_IP}"
-    echo "   - Max connections: 65,535"
-    echo "   - No limits on traffic"
+    echo "   - Using PROVEN working configuration"
     echo "   - Auto-fix enabled (checks every minute)"
     echo ""
     echo "🔧 Auto-fix features:"
     echo "   - Restarts nginx if it stops"
     echo "   - Clears memory cache if >90% usage"
-    echo "   - Fixes configuration errors"
-    echo "   - Logs everything to /var/log/proxy-autofix.log"
+    echo "   - Logs to /var/log/proxy-autofix.log"
     echo ""
     echo "📊 Monitor:"
     echo "   - Status: systemctl status nginx"
     echo "   - Logs: tail -f /var/log/proxy-autofix.log"
-    echo "   - Traffic: htop"
+    echo "   - Test: curl -H 'Host: test.com' http://localhost"
     echo ""
     echo "🎯 Point your domains to: ${PROXY_SERVER_IP}"
 else
-    echo "❌ Nginx configuration has errors"
+    echo "❌ Nginx failed to start"
+    systemctl status nginx
     exit 1
 fi
