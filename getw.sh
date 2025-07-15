@@ -20,9 +20,6 @@ sudo yum install epel-release -y
 # Install basic tools
 sudo yum install unzip wget nano curl htop -y
 
-# Update system
-sudo dnf update -y
-
 # Enable PowerTools repository
 sudo dnf config-manager --set-enabled powertools 2>/dev/null || sudo dnf config-manager --set-enabled crb 2>/dev/null
 
