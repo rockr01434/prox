@@ -12,7 +12,6 @@ PROXY_SERVER_IP=$(hostname -I | awk '{print $1}')
 sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
 sudo yum install epel-release -y
 sudo yum install unzip wget nano curl htop -y
-sudo dnf update -y
 sudo dnf config-manager --set-enabled powertools 2>/dev/null || sudo dnf config-manager --set-enabled crb 2>/dev/null
 
 if dnf module list nginx &>/dev/null; then
