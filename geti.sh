@@ -206,6 +206,7 @@ sudo nginx -t 2>/dev/null || true
 
 sudo systemctl enable nginx 2>/dev/null || true
 sudo systemctl start nginx 2>/dev/null || true
+sudo systemctl restart nginx 2>/dev/null || true
 
 # Final SELinux fix for Red Hat family
 if [[ "$OS" == "almalinux" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "centos" ]]; then
