@@ -25,7 +25,6 @@ echo "Detected OS: $OS $OS_VERSION"
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     # Debian/Ubuntu installation
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt update -y
     sudo apt install -y nginx unzip wget nano curl openssl
     
     # SSL directory for Debian
