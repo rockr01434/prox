@@ -25,7 +25,11 @@ echo "Detected OS: $OS $OS_VERSION"
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     # Debian/Ubuntu installation
     export DEBIAN_FRONTEND=noninteractive
-    sudo apt install -y nginx unzip wget nano curl openssl
+    sudo apt install -y nginx unzip wget nano curl openssl cron systemd ca-certificates gnupg lsb-release apt-transport-https software-properties-common
+    
+    # Ensure services are enabled
+    sudo systemctl enable cron
+    sudo systemctl start cron
     
     # SSL directory for Debian
     SSL_CERT_DIR="/etc/ssl/certs"
@@ -37,7 +41,11 @@ elif [[ "$OS" == "almalinux" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == 
     # Red Hat family installation
     sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux 2>/dev/null || true
     sudo yum install epel-release -y 2>/dev/null || true
-    sudo yum install unzip wget nano curl -y
+    sudo yum install unzip wget nano curl cronie systemd ca-certificates gnupg2 which tar gzip -y
+    
+    # Ensure services are enabled
+    sudo systemctl enable crond
+    sudo systemctl start crond
     
     if dnf module list nginx &>/dev/null; then
         sudo dnf module enable nginx -y 2>/dev/null
