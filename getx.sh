@@ -11,8 +11,7 @@ PROXY_SERVER_IP=$(hostname -I | awk '{print $1}')
 
 sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
 sudo yum install epel-release -y
-sudo yum install unzip wget nano curl htop -y
-sudo dnf config-manager --set-enabled powertools 2>/dev/null || sudo dnf config-manager --set-enabled crb 2>/dev/null
+sudo yum install unzip wget nano curl -y
 
 if dnf module list nginx &>/dev/null; then
     sudo dnf module enable nginx -y 2>/dev/null
@@ -40,10 +39,7 @@ http {
     sendfile on;
     tcp_nopush on;
     tcp_nodelay on;
-    keepalive_timeout 30;
-    types_hash_max_size 2048;
-    client_max_body_size 100M;
-
+    
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
@@ -60,11 +56,10 @@ http {
             proxy_set_header X-Forwarded-Proto \$scheme;
             proxy_set_header X-Forwarded-Host \$host;
             proxy_set_header X-Forwarded-Port \$server_port;
-            
+            proxy_buffering off;
+            proxy_request_buffering off;
             proxy_http_version 1.1;
-            proxy_connect_timeout 5s;
-            proxy_send_timeout 10s;
-            proxy_read_timeout 30s;
+            proxy_set_header Connection "";
         }
     }
 
@@ -83,7 +78,12 @@ http {
             proxy_set_header X-Real-IP \$remote_addr;
             proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto \$scheme;
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
             proxy_ssl_verify off;
+            proxy_ssl_session_reuse on;
         }
     }
 }
@@ -94,8 +94,6 @@ sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
     -keyout /etc/pki/tls/private/localhost.key \
     -out /etc/pki/tls/certs/localhost.crt \
     -subj "/C=US/ST=State/L=City/O=Organization/OU=Unit/CN=localhost"
-
-sudo dnf install certbot python3-certbot-nginx -y
 
 sudo setsebool -P httpd_can_network_connect 1 2>/dev/null || true
 sudo setsebool -P httpd_can_network_relay 1 2>/dev/null || true
@@ -157,9 +155,4 @@ sudo setsebool -P httpd_can_network_connect 1 2>/dev/null || true
 sudo setsebool -P httpd_can_network_relay 1 2>/dev/null || true
 sudo systemctl restart nginx 2>/dev/null || true
 
-echo ""
-echo "✅ Proxy Server Ready!"
-echo "Proxy IP: ${PROXY_SERVER_IP}"
-echo "Main Server: ${MAIN_SERVER_IP}"
-echo "Auto-fix: enabled"
-echo "Monitor: tail -f /var/log/proxy-autofix.log"
+echo "✅ Proxy Ready: ${PROXY_SERVER_IP} → ${MAIN_SERVER_IP}"
