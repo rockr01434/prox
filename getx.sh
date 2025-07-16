@@ -9,14 +9,52 @@ fi
 MAIN_SERVER_IP=$1
 PROXY_SERVER_IP=$(hostname -I | awk '{print $1}')
 
-sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
-sudo yum install epel-release -y
-sudo yum install unzip wget nano curl -y
-
-if dnf module list nginx &>/dev/null; then
-    sudo dnf module enable nginx -y 2>/dev/null
+# Detect OS
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS=$ID
+    OS_VERSION=$VERSION_ID
+else
+    echo "❌ Cannot detect OS"
+    exit 1
 fi
-sudo dnf install nginx -y
+
+echo "Detected OS: $OS $OS_VERSION"
+
+# Install packages based on OS
+if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+    # Debian/Ubuntu installation
+    export DEBIAN_FRONTEND=noninteractive
+    sudo apt update -y
+    sudo apt install -y nginx unzip wget nano curl openssl
+    
+    # SSL directory for Debian
+    SSL_CERT_DIR="/etc/ssl/certs"
+    SSL_KEY_DIR="/etc/ssl/private"
+    SSL_CERT_FILE="${SSL_CERT_DIR}/localhost.crt"
+    SSL_KEY_FILE="${SSL_KEY_DIR}/localhost.key"
+    
+elif [[ "$OS" == "almalinux" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "centos" ]]; then
+    # Red Hat family installation
+    sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux 2>/dev/null || true
+    sudo yum install epel-release -y 2>/dev/null || true
+    sudo yum install unzip wget nano curl -y
+    
+    if dnf module list nginx &>/dev/null; then
+        sudo dnf module enable nginx -y 2>/dev/null
+    fi
+    sudo dnf install nginx -y 2>/dev/null || sudo yum install nginx -y
+    
+    # SSL directory for Red Hat family
+    SSL_CERT_DIR="/etc/pki/tls/certs"
+    SSL_KEY_DIR="/etc/pki/tls/private"
+    SSL_CERT_FILE="${SSL_CERT_DIR}/localhost.crt"
+    SSL_KEY_FILE="${SSL_KEY_DIR}/localhost.key"
+    
+else
+    echo "❌ Unsupported OS: $OS"
+    exit 1
+fi
 
 if ! command -v nginx &> /dev/null; then
     echo "❌ Nginx installation failed"
@@ -68,8 +106,8 @@ http {
         listen [::]:443 ssl default_server;
         server_name _;
 
-        ssl_certificate /etc/pki/tls/certs/localhost.crt;
-        ssl_certificate_key /etc/pki/tls/private/localhost.key;
+        ssl_certificate ${SSL_CERT_FILE};
+        ssl_certificate_key ${SSL_KEY_FILE};
         ssl_protocols TLSv1.2 TLSv1.3;
 
         location / {
@@ -89,16 +127,26 @@ http {
 }
 EOF
 
-sudo mkdir -p /etc/pki/tls/certs /etc/pki/tls/private
+# Create SSL directories and certificates
+sudo mkdir -p "${SSL_CERT_DIR}" "${SSL_KEY_DIR}"
 sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-    -keyout /etc/pki/tls/private/localhost.key \
-    -out /etc/pki/tls/certs/localhost.crt \
+    -keyout "${SSL_KEY_FILE}" \
+    -out "${SSL_CERT_FILE}" \
     -subj "/C=US/ST=State/L=City/O=Organization/OU=Unit/CN=localhost"
 
-sudo setsebool -P httpd_can_network_connect 1 2>/dev/null || true
-sudo setsebool -P httpd_can_network_relay 1 2>/dev/null || true
-sudo setenforce 0 2>/dev/null || true
-sudo setenforce 1 2>/dev/null || true
+# OS-specific configurations
+if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+    # Debian/Ubuntu specific
+    sudo chown root:root "${SSL_KEY_FILE}"
+    sudo chmod 600 "${SSL_KEY_FILE}"
+    
+elif [[ "$OS" == "almalinux" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "centos" ]]; then
+    # Red Hat family specific - SELinux configuration
+    sudo setsebool -P httpd_can_network_connect 1 2>/dev/null || true
+    sudo setsebool -P httpd_can_network_relay 1 2>/dev/null || true
+    sudo setenforce 0 2>/dev/null || true
+    sudo setenforce 1 2>/dev/null || true
+fi
 
 sudo tee /usr/local/bin/proxy-autofix > /dev/null <<'EOF'
 #!/bin/bash
@@ -146,13 +194,11 @@ sudo nginx -t 2>/dev/null || true
 sudo systemctl enable nginx 2>/dev/null || true
 sudo systemctl start nginx 2>/dev/null || true
 
-sudo setsebool -P httpd_can_network_connect 1 2>/dev/null || true
-sudo setsebool -P httpd_can_network_relay 1 2>/dev/null || true
+# Final SELinux fix for Red Hat family
+if [[ "$OS" == "almalinux" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "centos" ]]; then
+    sudo setsebool -P httpd_can_network_connect 1 2>/dev/null || true
+    sudo setsebool -P httpd_can_network_relay 1 2>/dev/null || true
+    sudo systemctl restart nginx 2>/dev/null || true
+fi
 
-sudo systemctl restart nginx 2>/dev/null || true
-
-sudo setsebool -P httpd_can_network_connect 1 2>/dev/null || true
-sudo setsebool -P httpd_can_network_relay 1 2>/dev/null || true
-sudo systemctl restart nginx 2>/dev/null || true
-
-echo "✅ Proxy Ready: ${PROXY_SERVER_IP} → ${MAIN_SERVER_IP}"
+echo "✅ Proxy Ready: ${PROXY_SERVER_IP} → ${MAIN_SERVER_IP} (${OS})"
