@@ -37,6 +37,9 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     SSL_CERT_FILE="${SSL_CERT_DIR}/localhost.crt"
     SSL_KEY_FILE="${SSL_KEY_DIR}/localhost.key"
     
+    # Nginx user for Debian/Ubuntu
+    NGINX_USER="www-data"
+    
 elif [[ "$OS" == "almalinux" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "centos" ]]; then
     # Red Hat family installation
     sudo rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux 2>/dev/null || true
@@ -58,6 +61,9 @@ elif [[ "$OS" == "almalinux" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == 
     SSL_CERT_FILE="${SSL_CERT_DIR}/localhost.crt"
     SSL_KEY_FILE="${SSL_KEY_DIR}/localhost.key"
     
+    # Nginx user for Red Hat family
+    NGINX_USER="nginx"
+    
 else
     echo "❌ Unsupported OS: $OS"
     exit 1
@@ -69,7 +75,7 @@ if ! command -v nginx &> /dev/null; then
 fi
 
 sudo tee /etc/nginx/nginx.conf > /dev/null <<EOF
-user nginx;
+user ${NGINX_USER};
 worker_processes auto;
 error_log /var/log/nginx/error.log;
 pid /run/nginx.pid;
