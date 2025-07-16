@@ -21,6 +21,13 @@ fi
 
 echo "Detected OS: $OS $OS_VERSION"
 
+
+# Wait for cloud-init to finish if present (common on fresh VPS rebuilds)
+if command -v cloud-init >/dev/null 2>&1; then
+    echo "Waiting for cloud-init to complete..."
+    cloud-init status --wait || true
+fi
+
 # Install packages based on OS
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     # Debian/Ubuntu installation
